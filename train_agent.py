@@ -27,6 +27,26 @@ from stable_baselines3.common.callbacks import (
 )
 
 
+class LatestModelCallback(BaseCallback):
+    """Callback to save the latest model at a regular frequency."""
+    def __init__(self, save_path: str, save_freq: int, verbose: int = 0):
+        super().__init__(verbose)
+        self.save_path = save_path
+        self.save_freq = save_freq
+
+    def _init_callback(self) -> None:
+        if self.save_path is not None:
+            os.makedirs(self.save_path, exist_ok=True)
+
+    def _on_step(self) -> bool:
+        if self.n_calls > 0 and self.n_calls % self.save_freq == 0:
+            path = os.path.join(self.save_path, "latest_model.zip")
+            self.model.save(path)
+            if self.verbose > 1:
+                print(f"Saving latest model to {path}")
+        return True
+
+
 class CustomCNN(BaseFeaturesExtractor):
     def __init__(self, observation_space: gym.spaces.Box, features_dim: int = 256):
         super().__init__(observation_space, features_dim)
@@ -177,6 +197,9 @@ def create_model(env, config: TrainingConfig, tensorboard_log: Optional[str] = N
 
 def setup_callbacks(config: TrainingConfig, eval_env, save_path: str) -> CallbackList:
     """Setup training callbacks."""
+    callbacks = []
+
+    # Evaluation callback
     eval_callback = EvalCallback(
         eval_env,
         best_model_save_path=os.path.join(save_path, "best_model"),
@@ -186,14 +209,26 @@ def setup_callbacks(config: TrainingConfig, eval_env, save_path: str) -> Callbac
         deterministic=True,
         render=False,
     )
+    callbacks.append(eval_callback)
     
-    checkpoint_callback = CheckpointCallback(
-        save_freq=config.checkpoint_freq,
-        save_path=os.path.join(save_path, "checkpoints"),
-        name_prefix="bloxorz_dqn",
-    )
-    
-    return CallbackList([eval_callback, checkpoint_callback])
+    # Checkpoint callback
+    if config.checkpoint_freq > 0:
+        checkpoint_callback = CheckpointCallback(
+            save_freq=config.checkpoint_freq,
+            save_path=os.path.join(save_path, "checkpoints"),
+            name_prefix="bloxorz_dqn",
+        )
+        callbacks.append(checkpoint_callback)
+
+    # Latest model callback
+    if config.checkpoint_freq > 0:
+        latest_model_callback = LatestModelCallback(
+            save_path=os.path.join(save_path, "latest_model"),
+            save_freq=config.checkpoint_freq,
+        )
+        callbacks.append(latest_model_callback)
+
+    return CallbackList(callbacks)
 
 
 def optimize_gpu_settings():
@@ -304,8 +339,10 @@ def main():
     save_path = os.path.join(args.output_dir, f"bloxorz_dqn_{timestamp}")
     tensorboard_log = os.path.join(save_path, "tensorboard") if config.tensorboard_log else None
     monitor_dir = os.path.join(save_path, "monitor")
+    checkpoints_dir = os.path.join(save_path, "checkpoints")
+    latest_model_dir = os.path.join(save_path, "latest_model")
 
-    create_directories([save_path, monitor_dir])
+    create_directories([save_path, monitor_dir, checkpoints_dir, latest_model_dir])
     if tensorboard_log:
         create_directories([tensorboard_log])
 
@@ -340,27 +377,27 @@ def main():
     print(f"Total timesteps: {config.total_timesteps:,}")
 
     start_time = time.time()
+    final_model_path = os.path.join(save_path, "final_model.zip")
 
     try:
         model.learn(
             total_timesteps=config.total_timesteps,
             callback=callbacks,
             log_interval=config.log_interval,
-            progress_bar=True
+            progress_bar=True,
         )
     except KeyboardInterrupt:
         print("\nTraining interrupted by user.")
+    finally:
+        # Save final model, regardless of whether training was interrupted
+        model.save(final_model_path)
+        print(f"\nFinal model saved to: {final_model_path}")
 
     end_time = time.time()
     training_time = end_time - start_time
     
-    # Save final model
-    final_model_path = os.path.join(save_path, "final_model")
-    model.save(final_model_path)
-    
     print(f"\nTraining completed!")
     print(f"Training time: {training_time / 3600:.2f} hours")
-    print(f"Final model saved to: {final_model_path}")
 
     # Cleanup
     train_env.close()
