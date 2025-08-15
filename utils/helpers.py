@@ -2,6 +2,8 @@
 import numpy as np
 import random
 import torch
+import os
+from typing import List
 
 
 def set_global_seeds(seed: int) -> None:
@@ -21,3 +23,10 @@ def normalize_obs(obs: np.ndarray) -> np.ndarray:
 
 def manhattan(a, b):
     return abs(a[0] - b[0]) + abs(a[1] - b[1])
+
+
+def create_directories(dir_list: List[str]) -> None:
+    """Create directories if they do not exist."""
+    for dir_path in dir_list:
+        if not os.path.exists(dir_path):
+            os.makedirs(dir_path)
