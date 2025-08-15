@@ -46,6 +46,7 @@ class BloxorzEnv(gym.Env):
         # For human rendering
         self._screen = None
         self._clock = None
+        self._sprites: Dict[str, pygame.Surface] = {}
 
     def seed(self, seed: Optional[int] = None):
         if seed is not None:
@@ -152,11 +153,54 @@ class BloxorzEnv(gym.Env):
             pygame.display.set_caption("Bloxorz 2D")
             self._clock = pygame.time.Clock()
 
+            # Load sprites
+            if self.render_mode == "human":
+                try:
+                    self._sprites["floor"] = pygame.image.load("assets/images/floor.png").convert_alpha()
+                    self._sprites["block"] = pygame.image.load("assets/images/block_face.png").convert_alpha()
+                    self._sprites["goal"] = pygame.image.load("assets/images/goal.png").convert_alpha()
+
+                    # Scale sprites
+                    for key, sprite in self._sprites.items():
+                        self._sprites[key] = pygame.transform.scale(sprite, (BLOCK_SIZE, BLOCK_SIZE))
+                except pygame.error as e:
+                    print(f"Warning: Could not load sprites. Using default rendering. Error: {e}")
+                    self._sprites = {}  # Fallback to default rendering
+
     def _draw_human(self):
         if not _HAS_PYGAME or self._screen is None:
             return
-        surf = pygame.surfarray.make_surface(self._render_rgb_array().swapaxes(0, 1))
-        self._screen.blit(surf, (0, 0))
+
+        # If sprites are not loaded, fallback to rgb_array rendering
+        if not self._sprites:
+            surf = pygame.surfarray.make_surface(self._render_rgb_array().swapaxes(0, 1))
+            self._screen.blit(surf, (0, 0))
+            pygame.display.flip()
+            self._clock.tick(self.metadata.get("render_fps", 60))
+            return
+
+        H, W = MAX_LEVEL_SIZE, MAX_LEVEL_SIZE
+
+        # Background
+        self._screen.fill(COLORS.get("background", (50, 50, 50)))
+
+        # Draw floor
+        assert self.state is not None
+        grid = self.state.grid
+        for r in range(H):
+            for c in range(W):
+                if grid[r, c]:
+                    self._screen.blit(self._sprites["floor"], (c * BLOCK_SIZE, r * BLOCK_SIZE))
+
+        # Draw goal
+        gx, gy = self.state.goal
+        self._screen.blit(self._sprites["goal"], (gx * BLOCK_SIZE, gy * BLOCK_SIZE))
+
+        # Draw block
+        for (x, y) in self.state.block.occupied_cells():
+            if 0 <= x < W and 0 <= y < H:
+                self._screen.blit(self._sprites["block"], (x * BLOCK_SIZE, y * BLOCK_SIZE))
+
         pygame.display.flip()
         self._clock.tick(self.metadata.get("render_fps", 60))
 

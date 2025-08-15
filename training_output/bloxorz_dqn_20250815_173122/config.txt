@@ -1,7 +1,7 @@
 Training Configuration:
   difficulty: medium
   env_seed: 42
-  total_timesteps: 100
+  total_timesteps: 20
   learning_rate: 0.0001
   batch_size: 32
   buffer_size: 100000
@@ -18,7 +18,7 @@ Training Configuration:
   use_mixed_precision: True
   eval_freq: 10000
   eval_episodes: 10
-  checkpoint_freq: 50000
+  checkpoint_freq: 10
   save_best_model: True
   log_interval: 1000
   tensorboard_log: True
