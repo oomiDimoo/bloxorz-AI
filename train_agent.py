@@ -202,7 +202,7 @@ def setup_callbacks(config: TrainingConfig, eval_env, save_path: str) -> Callbac
     # Evaluation callback
     eval_callback = EvalCallback(
         eval_env,
-        best_model_save_path=os.path.join(save_path, "best_model"),
+        best_model_save_path="models/best_model",
         log_path=os.path.join(save_path, "eval"),
         eval_freq=config.eval_freq,
         n_eval_episodes=config.eval_episodes,
