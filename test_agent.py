@@ -8,7 +8,8 @@ from typing import Optional
 
 import numpy as np
 from stable_baselines3 import DQN
-from stable_baselines3.common.vec_env import DummyVecEnv, VecTransposeImage
+from stable_baselines3.common.vec_env import DummyVecEnv
+from stable_baselines3.common.monitor import Monitor
 
 from env.bloxorz_env import BloxorzEnv
 from utils.helpers import set_global_seeds
@@ -19,19 +20,26 @@ def test_agent_2d(model_path: str, difficulty: str = "medium", episodes: int = 5
     """Test agent in 2D environment (same as training)."""
     print(f"Loading model from {model_path}...")
     
-    # Create environment
-    env = BloxorzEnv(
-        difficulty=difficulty,
-        render_mode="human" if render else None,
-        seed=seed
-    )
-    
-    # Wrap environment for model compatibility
-    vec_env = DummyVecEnv([lambda: env])
+    # Create environment and wrap it with Monitor to match training
+    def make_env():
+        env = BloxorzEnv(
+            difficulty=difficulty,
+            render_mode="human" if render else None,
+            seed=seed
+        )
+        return Monitor(env)
+
+    vec_env = DummyVecEnv([make_env])
     
     # Load trained model
-    model = DQN.load(model_path, env=vec_env)
-    
+    try:
+        model = DQN.load(model_path, env=vec_env)
+    except Exception as e:
+        print(f"Error loading model: {e}")
+        print("Please ensure the model path is correct and was trained with a compatible environment.")
+        vec_env.close()
+        return
+
     total_reward = 0
     success_count = 0
     
@@ -45,36 +53,43 @@ def test_agent_2d(model_path: str, difficulty: str = "medium", episodes: int = 5
             print(f"\nEpisode {episode + 1}/{episodes}")
             
             while not done:
-                # Predict action
-                action, _states = model.predict(obs, deterministic=True)
+                try:
+                    action, _states = model.predict(obs, deterministic=True)
+                    obs, reward, done, info = vec_env.step(action)
 
-                # Take step
-                obs, reward, done, info = vec_env.step(action)
-                episode_reward += reward[0]
-                step_count += 1
+                    episode_reward += reward[0]
+                    step_count += 1
 
-                if render:
-                    time.sleep(speed)  # Slow down for visualization
+                    if render:
+                        time.sleep(speed)
 
-                # Check if episode is done
-                if done[0]:
-                    if info[0].get('success', False):
-                        success_count += 1
-                        print(f"Success! Steps: {step_count}, Reward: {episode_reward:.2f}")
-                    else:
-                        print(f"Failed. Steps: {step_count}, Reward: {episode_reward:.2f}")
-                    break
+                    if done[0]:
+                        # Monitor wrapper handles success logging from `info` dict
+                        if info[0].get('success', False):
+                            success_count += 1
+                            print(f"Success! Steps: {step_count}, Reward: {episode_reward:.2f}")
+                        else:
+                            print(f"Failed. Steps: {step_count}, Reward: {episode_reward:.2f}")
+                        break
+
+                except Exception as e:
+                    print(f"\nAn error occurred during episode {episode + 1}: {e}")
+                    done = True # End this episode
             
             total_reward += episode_reward
     
+    except KeyboardInterrupt:
+        print("\nTesting interrupted by user.")
+
     finally:
         vec_env.close()
         avg_reward = total_reward / episodes if episodes > 0 else 0
         success_rate = success_count / episodes if episodes > 0 else 0
 
-        print(f"\nResults:")
-        print(f"Average reward: {avg_reward:.2f}")
-        print(f"Success rate: {success_rate:.2%}")
+        print(f"\n--- Test Results ---")
+        print(f"Episodes: {episodes}")
+        print(f"Successes: {success_count} ({success_rate:.2%})")
+        print(f"Average Reward: {avg_reward:.2f}")
     return avg_reward, success_rate
 
 
