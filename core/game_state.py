@@ -131,30 +131,20 @@ class GameState:
             ns.steps += 1
             ns.done = True
             ns.success = False
-            return ns, -1.0, True, info
+            return ns, -2.0, True, info
 
-        # Reward shaping: give reward for getting closer to the goal
-        dist_before = self.manhattan_to_goal()
         ns = self.copy()
         ns.block = next_block
         ns.steps += 1
-        dist_after = ns.manhattan_to_goal()
 
         # Check for success
         if ns.block.is_standing and ns.block.pos1 == self.goal:
             ns.done = True
             ns.success = True
-            return ns, 1.0, True, info
+            return ns, 10.0, True, info
 
-        # Reward for distance change
-        reward = 0.0
-        if dist_after < dist_before:
-            reward += 0.01  # Closer to goal
-        else:
-            reward -= 0.01  # Further from goal
-
-        # Small step penalty
-        reward -= 0.001
+        # Small step penalty to encourage efficiency
+        reward = -0.001
 
         return ns, reward, False, info
 
