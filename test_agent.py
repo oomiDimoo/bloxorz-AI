@@ -7,19 +7,21 @@ import time
 from typing import Optional
 
 import numpy as np
+import torch
 from stable_baselines3 import DQN
 from stable_baselines3.common.vec_env import DummyVecEnv
 from stable_baselines3.common.monitor import Monitor
 
 from env.bloxorz_env import BloxorzEnv
 from utils.helpers import set_global_seeds
+from train_agent import CustomCNN
 
 
-def test_agent_2d(model_path: str, difficulty: str = "medium", episodes: int = 5, 
+def test_agent_2d(model_path: str, difficulty: str = "medium", episodes: int = 5,
                   render: bool = True, seed: Optional[int] = None, speed: float = 0.1):
     """Test agent in 2D environment (same as training)."""
     print(f"Loading model from {model_path}...")
-    
+
     # Create environment and wrap it with Monitor to match training
     def make_env():
         env = BloxorzEnv(
@@ -30,10 +32,19 @@ def test_agent_2d(model_path: str, difficulty: str = "medium", episodes: int = 5
         return Monitor(env)
 
     vec_env = DummyVecEnv([make_env])
-    
+
+    # Define policy kwargs for custom CNN
+    policy_kwargs = {
+        "features_extractor_class": CustomCNN,
+        "features_extractor_kwargs": dict(features_dim=256),
+        "net_arch": [256],  # Must match the architecture used during training
+        "activation_fn": torch.nn.ReLU,
+        "normalize_images": False,
+    }
+
     # Load trained model
     try:
-        model = DQN.load(model_path, env=vec_env)
+        model = DQN.load(model_path, env=vec_env, policy_kwargs=policy_kwargs)
     except Exception as e:
         print(f"Error loading model: {e}")
         print("Please ensure the model path is correct and was trained with a compatible environment.")
