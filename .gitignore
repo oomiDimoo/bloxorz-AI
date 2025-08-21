@@ -1,3 +1,6 @@
 /logs
 /training_output
 /training_output
+/level_generation/__pycache__
+/core/__pycache__
+/level_generation/__pycache__

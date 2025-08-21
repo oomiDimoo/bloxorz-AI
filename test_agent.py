@@ -14,7 +14,7 @@ from stable_baselines3.common.monitor import Monitor
 
 from env.bloxorz_env import BloxorzEnv
 from utils.helpers import set_global_seeds
-from train_agent import CustomCNN
+from utils.model import CustomCNN
 
 
 def test_agent_2d(model_path: str, difficulty: str = "medium", episodes: int = 5,
@@ -37,7 +37,7 @@ def test_agent_2d(model_path: str, difficulty: str = "medium", episodes: int = 5
     policy_kwargs = {
         "features_extractor_class": CustomCNN,
         "features_extractor_kwargs": dict(features_dim=256),
-        "net_arch": [256],  # Must match the architecture used during training
+        "net_arch": [256,256,256],  # Must match the architecture used during training
         "activation_fn": torch.nn.ReLU,
         "normalize_images": False,
     }

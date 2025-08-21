@@ -14,7 +14,7 @@
     "exploration_final_eps": 0.05,
     "gamma": 0.99,
     "net_arch": [
-        256
+        256,256,256
     ],
     "device": "cuda",
     "use_mixed_precision": true,
