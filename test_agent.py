@@ -66,7 +66,8 @@ def test_agent_2d(model_path: str, difficulty: str = "medium", episodes: int = 5
             while not done:
                 try:
                     action, _states = model.predict(obs, deterministic=True)
-                    obs, reward, done, info = vec_env.step(action)
+                    obs, reward, dones, info = vec_env.step(action)
+                    done = dones[0]
 
                     episode_reward += reward[0]
                     step_count += 1
@@ -74,7 +75,7 @@ def test_agent_2d(model_path: str, difficulty: str = "medium", episodes: int = 5
                     if render:
                         time.sleep(speed)
 
-                    if done[0]:
+                    if done:
                         # Monitor wrapper handles success logging from `info` dict
                         if info[0].get('success', False):
                             success_count += 1

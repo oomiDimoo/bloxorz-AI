@@ -91,13 +91,22 @@ class GameState:
     steps: int = 0
     done: bool = False
     success: bool = False
+    history: frozenset[Block] = frozenset()
+    prev_action: Optional[Action] = None
 
     @staticmethod
     def from_level(grid: np.ndarray, start: Tuple[int, int], goal: Tuple[int, int]) -> "GameState":
         assert grid.dtype == np.bool_, "grid must be boolean array"
         assert grid[start[1], start[0]], "start must be on floor"
         assert grid[goal[1], goal[0]], "goal must be on floor"
-        return GameState(grid=grid.copy(), start=start, goal=goal, block=Block(start, start))
+        initial_block = Block(start, start)
+        return GameState(
+            grid=grid.copy(),
+            start=start,
+            goal=goal,
+            block=initial_block,
+            history=frozenset([initial_block]),
+        )
 
     def copy(self) -> "GameState":
         return GameState(
@@ -108,6 +117,8 @@ class GameState:
             steps=self.steps,
             done=self.done,
             success=self.success,
+            history=self.history,
+            prev_action=self.prev_action,
         )
 
     def valid_actions(self) -> List[int]:
@@ -121,30 +132,63 @@ class GameState:
     def step(self, action: Action) -> Tuple["GameState", float, bool, Dict]:
         if self.done:
             return self, 0.0, True, {"terminated": True}
-        direction = ACTIONS[action]
+
+        # --- Pre-computation ---
+        info: Dict = {"action_number": action}
+        direction = ACTIONS.get(action)
+        if direction is None:
+            # Invalid action, though action space should prevent this
+            return self, -1.0, True, {**info, "error": "Invalid action"}
+
+        info["action"] = direction
+        current_dist = self.manhattan_to_goal()
+
+        # --- Move block ---
         next_block = self.block.move(direction)
-        info: Dict = {"action_number": action, "action": direction}
+
+        # --- Check for termination conditions ---
         if not next_block.in_bounds_and_valid(self.grid):
-            # fell off
             ns = self.copy()
             ns.block = next_block
             ns.steps += 1
             ns.done = True
             ns.success = False
-            return ns, -2.0, True, info
+            return ns, -2.0, True, info  # Fell off, large penalty
 
+        # --- Create new state ---
         ns = self.copy()
         ns.block = next_block
         ns.steps += 1
+        ns.prev_action = action
 
-        # Check for success
+        # --- Check for success ---
         if ns.block.is_standing and ns.block.pos1 == self.goal:
             ns.done = True
             ns.success = True
-            return ns, 10.0, True, info
+            return ns, 10.0, True, info  # Success, large reward
 
-        # Small step penalty to encourage efficiency
-        reward = -0.001
+        # --- Reward shaping ---
+        # 1. Distance-based reward
+        new_dist = ns.manhattan_to_goal()
+        reward = (current_dist - new_dist) * 0.1  # Reward for getting closer
+
+        # 2. Penalty for visiting a repeated state
+        if next_block in self.history:
+            reward -= 0.25  # Penalize re-visiting states
+        else:
+            ns.history = self.history.union([next_block])
+
+        # 3. Small step penalty to encourage efficiency
+        reward -= 0.01
+
+        # 4. Discourage oscillating moves (e.g., LEFT -> RIGHT)
+        if self.prev_action is not None:
+            # up/down and left/right are opposites
+            if (self.prev_action == 0 and action == 1) or \
+               (self.prev_action == 1 and action == 0) or \
+               (self.prev_action == 2 and action == 3) or \
+               (self.prev_action == 3 and action == 2):
+                reward -= 0.1
 
         return ns, reward, False, info
 
